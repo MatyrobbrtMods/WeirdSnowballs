@@ -6,12 +6,12 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
-import net.minecraft.world.entity.projectile.Snowball;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SnowballItem;
 import net.minecraft.world.level.Level;
@@ -28,7 +28,7 @@ public class WeirdSnowballItem extends SnowballItem {
     }
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack itemstack = player.getItemInHand(hand);
         level.playSound(
                 null,
@@ -40,7 +40,7 @@ public class WeirdSnowballItem extends SnowballItem {
                 0.5F,
                 0.4F / (level.getRandom().nextFloat() * 0.4F + 0.8F)
         );
-        if (!level.isClientSide) {
+        if (!level.isClientSide()) {
             Snowball snowball = new WeirdSnowball(type.get(), level, category);
             snowball.setOwner(player);
             snowball.setPos(player.getX(), player.getEyeY() - 0.1F, player.getZ());
@@ -51,12 +51,12 @@ public class WeirdSnowballItem extends SnowballItem {
 
         player.awardStat(Stats.ITEM_USED.get(this));
         itemstack.consume(1, player);
-        return InteractionResultHolder.sidedSuccess(itemstack, level.isClientSide());
+        return InteractionResult.SUCCESS;
     }
 
     @Override
     public Projectile asProjectile(Level level, Position pos, ItemStack stack, Direction direction) {
-        Snowball snowball = new WeirdSnowball(type.get(), level, category);
+        var snowball = new WeirdSnowball(type.get(), level, category);
         snowball.setPos(pos.x(), pos.y(), pos.z());
         snowball.setItem(stack);
         return snowball;

@@ -2,12 +2,8 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "S": {
-      "item": "minecraft:snowball"
-    },
-    "W": {
-      "tag": "c:crops/nether_wart"
-    }
+    "S": "minecraft:snowball",
+    "W": "#c:crops/nether_wart"
   },
   "pattern": [
     "SSS",

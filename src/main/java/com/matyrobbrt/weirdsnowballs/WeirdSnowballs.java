@@ -1,11 +1,17 @@
 package com.matyrobbrt.weirdsnowballs;
 
+import net.minecraft.client.data.models.BlockModelGenerators;
+import net.minecraft.client.data.models.ItemModelGenerators;
+import net.minecraft.client.data.models.ModelProvider;
+import net.minecraft.client.data.models.model.ModelTemplates;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.data.PackOutput;
 import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.data.recipes.RecipeProvider;
-import net.minecraft.data.recipes.ShapedRecipeBuilder;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -17,7 +23,6 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
-import net.neoforged.neoforge.client.model.generators.ItemModelProvider;
 import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.common.data.LanguageProvider;
 import net.neoforged.neoforge.data.event.GatherDataEvent;
@@ -28,6 +33,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Mod(WeirdSnowballs.MOD_ID)
 public class WeirdSnowballs {
@@ -44,9 +50,9 @@ public class WeirdSnowballs {
         for (MobEffectCategory value : MobEffectCategory.values()) {
             var type = ENTITY_TYPES.register(value.name().toLowerCase(Locale.ROOT) + "_snowball", key ->
                     EntityType.Builder.<WeirdSnowball>of((entityType, level) -> new WeirdSnowball(entityType, level, value), MobCategory.MISC).sized(0.25F, 0.25F).clientTrackingRange(4).updateInterval(10)
-                        .build(key.toString()));
+                        .build(ResourceKey.create(Registries.ENTITY_TYPE, key)));
             entityMap.put(value, type);
-            map.put(value, ITEMS.register(value.name().toLowerCase(Locale.ROOT) + "_snowball", () ->
+            map.put(value, ITEMS.register(value.name().toLowerCase(Locale.ROOT) + "_snowball", (id) ->
                     new WeirdSnowballItem(
                             new Item.Properties()
                                     .rarity(switch (value) {
@@ -54,7 +60,8 @@ public class WeirdSnowballs {
                                         case NEUTRAL -> Rarity.UNCOMMON;
                                         case BENEFICIAL -> Rarity.EPIC;
                                     })
-                                    .stacksTo(16),
+                                    .stacksTo(16)
+                                    .setId(ResourceKey.create(Registries.ITEM, id)),
                             value,
                             type
                     )));
@@ -74,21 +81,21 @@ public class WeirdSnowballs {
             }
         }));
 
-        if (!FMLEnvironment.production) {
+        if (!FMLEnvironment.isProduction()) {
             datagen(bus);
         }
     }
 
     private void datagen(IEventBus bus) {
-        bus.addListener((final GatherDataEvent event) -> {
-            event.getGenerator().addProvider(event.includeClient(), new ItemModelProvider(event.getGenerator().getPackOutput(), MOD_ID, event.getExistingFileHelper()) {
+        bus.addListener((final GatherDataEvent.Client event) -> {
+            event.getGenerator().addProvider(true, new ModelProvider(event.getGenerator().getPackOutput(), MOD_ID) {
                 @Override
-                protected void registerModels() {
-                    ITEMS_BY_CATEGORY.values().forEach(h -> basicItem(h.value()));
+                protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
+                    ITEMS_BY_CATEGORY.values().forEach(it -> itemModels.generateFlatItem(it.value(), ModelTemplates.FLAT_ITEM));
                 }
             });
 
-            event.getGenerator().addProvider(event.includeClient(), new LanguageProvider(event.getGenerator().getPackOutput(), MOD_ID, "en_us") {
+            event.getGenerator().addProvider(true, new LanguageProvider(event.getGenerator().getPackOutput(), MOD_ID, "en_us") {
                 @Override
                 protected void addTranslations() {
                     ITEMS_BY_CATEGORY.forEach((cat, item) -> add(item.value(), getCategory(cat) + " Effect Snowball"));
@@ -104,30 +111,46 @@ public class WeirdSnowballs {
                 }
             });
 
-            event.getGenerator().addProvider(event.includeServer(), new RecipeProvider(event.getGenerator().getPackOutput(), event.getLookupProvider()) {
+            event.getGenerator().addProvider(true, new RecipeRunner(event.getGenerator().getPackOutput(), event.getLookupProvider()));
+        });
+    }
+
+    private static final class RecipeRunner extends RecipeProvider.Runner {
+        public RecipeRunner(PackOutput output, CompletableFuture<HolderLookup.Provider> lookupProvider) {
+            super(output, lookupProvider);
+        }
+
+        @Override
+        protected RecipeProvider createRecipeProvider(HolderLookup.Provider lookupProvider, RecipeOutput output) {
+            return new RecipeProvider(lookupProvider, output) {
                 @Override
-                protected void buildRecipes(RecipeOutput recipeOutput) {
-                    ShapedRecipeBuilder.shaped(RecipeCategory.MISC, ITEMS_BY_CATEGORY.get(MobEffectCategory.NEUTRAL).value(), 8)
+                protected void buildRecipes() {
+                    this.shaped(RecipeCategory.MISC, ITEMS_BY_CATEGORY.get(MobEffectCategory.NEUTRAL).value(), 8)
                             .pattern("SSS").pattern("SWS").pattern("SSS")
                             .define('S', Items.SNOWBALL)
                             .define('W', Tags.Items.CROPS_NETHER_WART)
                             .unlockedBy("has_snowball", has(Items.SNOWBALL))
-                            .save(recipeOutput);
+                            .save(this.output);
 
-                    ShapedRecipeBuilder.shaped(RecipeCategory.MISC, ITEMS_BY_CATEGORY.get(MobEffectCategory.BENEFICIAL).value(), 8)
+                    this.shaped(RecipeCategory.MISC, ITEMS_BY_CATEGORY.get(MobEffectCategory.BENEFICIAL).value(), 8)
                             .pattern("SSS").pattern("SCS").pattern("SSS")
                             .define('S', ITEMS_BY_CATEGORY.get(MobEffectCategory.NEUTRAL).value())
                             .define('C', Items.MAGMA_CREAM)
                             .unlockedBy("has_snowball", has(Items.SNOWBALL))
-                            .save(recipeOutput);
-                    ShapedRecipeBuilder.shaped(RecipeCategory.MISC, ITEMS_BY_CATEGORY.get(MobEffectCategory.HARMFUL).value(), 8)
+                            .save(this.output);
+                    this.shaped(RecipeCategory.MISC, ITEMS_BY_CATEGORY.get(MobEffectCategory.HARMFUL).value(), 8)
                             .pattern("SSS").pattern("SES").pattern("SSS")
                             .define('S', ITEMS_BY_CATEGORY.get(MobEffectCategory.NEUTRAL).value())
                             .define('E', Items.FERMENTED_SPIDER_EYE)
                             .unlockedBy("has_snowball", has(Items.SNOWBALL))
-                            .save(recipeOutput);
+                            .save(this.output);
                 }
-            });
-        });
+            };
+        }
+
+        @Override
+        public String getName() {
+            return MOD_ID + " recipes";
+        }
     }
 }
